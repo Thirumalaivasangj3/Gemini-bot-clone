@@ -8,27 +8,23 @@ const deleteChatButton = document.querySelector("#delete-chat-button");
 let userMessage = null;
 let isResponseGenerating = false;
 
-// API configuration
-const API_KEY = ""; // Your API key here
-const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`;
+// Updated API configuration for Gemini 1.5 Flash (latest stable)
+const API_KEY = "AIzaSyD-s05_QqnizUk3MuJJoWQBWbeLkjQlgjg"; // Replace with your key
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
-// Load theme and chat data from local storage on page load
+// Load saved data
 const loadDataFromLocalstorage = () => {
   const savedChats = localStorage.getItem("saved-chats");
-  const isLightMode = (localStorage.getItem("themeColor") === "light_mode");
+  const isLightMode = localStorage.getItem("themeColor") === "light_mode";
 
-  // Apply the stored theme
   document.body.classList.toggle("light_mode", isLightMode);
   toggleThemeButton.innerText = isLightMode ? "dark_mode" : "light_mode";
-
-  // Restore saved chats or clear the chat container
   chatContainer.innerHTML = savedChats || '';
   document.body.classList.toggle("hide-header", savedChats);
-
-  chatContainer.scrollTo(0, chatContainer.scrollHeight); // Scroll to the bottom
+  chatContainer.scrollTo(0, chatContainer.scrollHeight);
 }
 
-// Create a new message element and return it
+// Create message element
 const createMessageElement = (content, ...classes) => {
   const div = document.createElement("div");
   div.classList.add("message", ...classes);
@@ -36,63 +32,70 @@ const createMessageElement = (content, ...classes) => {
   return div;
 }
 
-// Show typing effect by displaying words one by one
+// Typing effect
 const showTypingEffect = (text, textElement, incomingMessageDiv) => {
   const words = text.split(' ');
   let currentWordIndex = 0;
 
   const typingInterval = setInterval(() => {
-    // Append each word to the text element with a space
-    textElement.innerText += (currentWordIndex === 0 ? '' : ' ') + words[currentWordIndex++];
-    incomingMessageDiv.querySelector(".icon").classList.add("hide");
-
-    // If all words are displayed
-    if (currentWordIndex === words.length) {
+    if (currentWordIndex < words.length) {
+      textElement.innerText += (currentWordIndex === 0 ? '' : ' ') + words[currentWordIndex];
+      currentWordIndex++;
+      incomingMessageDiv.querySelector(".icon")?.classList.add("hide");
+      chatContainer.scrollTo(0, chatContainer.scrollHeight);
+    } else {
       clearInterval(typingInterval);
       isResponseGenerating = false;
-      incomingMessageDiv.querySelector(".icon").classList.remove("hide");
-      localStorage.setItem("saved-chats", chatContainer.innerHTML); // Save chats to local storage
+      incomingMessageDiv.querySelector(".icon")?.classList.remove("hide");
+      localStorage.setItem("saved-chats", chatContainer.innerHTML);
     }
-    chatContainer.scrollTo(0, chatContainer.scrollHeight); // Scroll to the bottom
-  }, 75);
+  }, 50);
 }
 
-// Fetch response from the API based on user message
+// API Request with updated format
 const generateAPIResponse = async (incomingMessageDiv) => {
-  const textElement = incomingMessageDiv.querySelector(".text"); // Getting text element
+  const textElement = incomingMessageDiv.querySelector(".text");
 
   try {
-    // Send a POST request to the API with the user's message
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        contents: [{ 
-          role: "user", 
-          parts: [{ text: userMessage }] 
-        }] 
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{ text: userMessage }]
+        }],
+        generationConfig: {
+          temperature: 0.9,
+          topP: 1,
+          topK: 40
+        }
       }),
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error.message);
+    
+    if (!response.ok) {
+      throw new Error(data.error?.message || "API request failed");
+    }
 
-    // Get the API response text and remove asterisks from it
-    const apiResponse = data?.candidates[0].content.parts[0].text.replace(/\*\*(.*?)\*\*/g, '$1');
-    showTypingEffect(apiResponse, textElement, incomingMessageDiv); // Show typing effect
-  } catch (error) { // Handle error
+    const apiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 
+                       "Sorry, I couldn't generate a response.";
+    showTypingEffect(apiResponse, textElement, incomingMessageDiv);
+  } catch (error) {
+    console.error("API Error:", error);
     isResponseGenerating = false;
-    textElement.innerText = error.message;
-    textElement.parentElement.closest(".message").classList.add("error");
+    textElement.innerText = `Error: ${error.message}`;
+    textElement.parentElement.classList.add("error");
   } finally {
     incomingMessageDiv.classList.remove("loading");
   }
 }
 
-// Show a loading animation while waiting for the API response
+// Loading animation
 const showLoadingAnimation = () => {
   const html = `<div class="message-content">
-                  <img class="avatar" src="/downloads.png" alt="Gemini avatar">
+                  <img class="avatar" src="downloads.png" alt="Gemini avatar">
                   <p class="text"></p>
                   <div class="loading-indicator">
                     <div class="loading-bar"></div>
@@ -100,91 +103,78 @@ const showLoadingAnimation = () => {
                     <div class="loading-bar"></div>
                   </div>
                 </div>
-                <span onClick="copyMessage(this)" class="icon material-symbols-rounded">content_copy</span>`;
+                <span onclick="copyMessage(this)" class="icon material-symbols-rounded">content_copy</span>`;
 
   const incomingMessageDiv = createMessageElement(html, "incoming", "loading");
   chatContainer.appendChild(incomingMessageDiv);
-
-  chatContainer.scrollTo(0, chatContainer.scrollHeight); // Scroll to the bottom
+  chatContainer.scrollTo(0, chatContainer.scrollHeight);
   generateAPIResponse(incomingMessageDiv);
 }
 
-// Copy message text to the clipboard
-const copyMessage = (copyButton) => {
+// Copy function
+window.copyMessage = (copyButton) => {
   const messageText = copyButton.parentElement.querySelector(".text").innerText;
-
-  navigator.clipboard.writeText(messageText);
-  copyButton.innerText = "done"; // Show confirmation icon
-  setTimeout(() => copyButton.innerText = "content_copy", 1000); // Revert icon after 1 second
+  navigator.clipboard.writeText(messageText).then(() => {
+    copyButton.innerText = "done";
+    setTimeout(() => copyButton.innerText = "content_copy", 1000);
+  });
 }
 
-// Handle sending outgoing chat messages
-const handleOutgoingChat = () => {
-  userMessage = typingForm.querySelector(".typing-input").value.trim() || userMessage;
-  if(!userMessage || isResponseGenerating) return; // Exit if there is no message or response is generating
+// Add timestamp
+const appendTimestamp = (messageDiv) => {
+  const timestamp = document.createElement("span");
+  timestamp.className = "timestamp";
+  timestamp.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  messageDiv.querySelector(".message-content").appendChild(timestamp);
+}
+
+// Handle outgoing messages
+const handleOutgoingChatLogic = () => {
+  userMessage = typingForm.querySelector(".typing-input").value.trim();
+  if (!userMessage || isResponseGenerating) return;
 
   isResponseGenerating = true;
 
   const html = `<div class="message-content">
-                  <img class="avatar" src="/download.png" alt="User avatar">
-                  <p class="text"></p>
+                  <img class="avatar" src="download1.png" alt="User avatar">
+                  <p class="text">${userMessage}</p>
                 </div>`;
 
   const outgoingMessageDiv = createMessageElement(html, "outgoing");
-  outgoingMessageDiv.querySelector(".text").innerText = userMessage;
   chatContainer.appendChild(outgoingMessageDiv);
-  
-  typingForm.reset(); // Clear input field
+  appendTimestamp(outgoingMessageDiv);
+
+  typingForm.reset();
   document.body.classList.add("hide-header");
-  chatContainer.scrollTo(0, chatContainer.scrollHeight); // Scroll to the bottom
-  setTimeout(showLoadingAnimation, 500); // Show loading animation after a delay
+  chatContainer.scrollTo(0, chatContainer.scrollHeight);
+  setTimeout(showLoadingAnimation, 500);
 }
 
-// Toggle between light and dark themes
+// Event listeners
+typingForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  handleOutgoingChatLogic();
+});
+
+suggestions.forEach(suggestion => {
+  suggestion.addEventListener("click", () => {
+    userMessage = suggestion.querySelector(".text").innerText;
+    handleOutgoingChatLogic();
+  });
+});
+
 toggleThemeButton.addEventListener("click", () => {
   const isLightMode = document.body.classList.toggle("light_mode");
   localStorage.setItem("themeColor", isLightMode ? "light_mode" : "dark_mode");
   toggleThemeButton.innerText = isLightMode ? "dark_mode" : "light_mode";
 });
 
-// Delete all chats from local storage when button is clicked
 deleteChatButton.addEventListener("click", () => {
-  if (confirm("Are you sure you want to delete all the chats?")) {
+  if (confirm("Are you sure you want to delete all chats?")) {
     localStorage.removeItem("saved-chats");
     loadDataFromLocalstorage();
   }
 });
 
-// Set userMessage and handle outgoing chat when a suggestion is clicked
-suggestions.forEach(suggestion => {
-  suggestion.addEventListener("click", () => {
-    userMessage = suggestion.querySelector(".text").innerText;
-    handleOutgoingChat();
-  });
-});
-
-// Prevent default form submission and handle outgoing chat
-typingForm.addEventListener("submit", (e) => {
-  e.preventDefault(); 
-  handleOutgoingChat();
-});
-
-// **New Feature: Timestamp for Messages**
-const appendTimestamp = (messageDiv) => {
-  const timestamp = document.createElement("span");
-  const currentDateTime = new Date().toLocaleTimeString();
-  timestamp.className = "timestamp";
-  timestamp.innerText = currentDateTime;
-  messageDiv.querySelector(".message-content").appendChild(timestamp);
-}
-
-
-// Modify outgoing chat to include timestamp
-const originalHandleOutgoingChat = handleOutgoingChat;
-handleOutgoingChat = () => {
-  originalHandleOutgoingChat();
-  const lastMessage = chatContainer.querySelector(".message:last-child");
-  appendTimestamp(lastMessage);
-}
-
+// Initialize
 loadDataFromLocalstorage();
