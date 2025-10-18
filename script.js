@@ -1,18 +1,29 @@
+// ==============================
+// Chat UI Selectors
+// ==============================
 const typingForm = document.querySelector(".typing-form");
 const chatContainer = document.querySelector(".chat-list");
 const suggestions = document.querySelectorAll(".suggestion");
 const toggleThemeButton = document.querySelector("#theme-toggle-button");
 const deleteChatButton = document.querySelector("#delete-chat-button");
 
-// State variables
+// ==============================
+// State Variables
+// ==============================
 let userMessage = null;
 let isResponseGenerating = false;
 
-// Updated API configuration for Gemini 1.5 Flash (latest stable)
-const API_KEY = "AIzaSyD-s05_QqnizUk3MuJJoWQBWbeLkjQlgjg"; // Replace with your key
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+// ==============================
+// Gemini API Configuration
+// ==============================
+// ✅ Use the latest Gemini v1 endpoint (not v1beta)
+const API_KEY = "AIzaSyBeo4qIie4u7vnaj3kxp0tz0y7A2fCMgJ0"; // <-- Replace with your valid Gemini API key
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
-// Load saved data
+
+// ==============================
+// Load Saved Chat and Theme
+// ==============================
 const loadDataFromLocalstorage = () => {
   const savedChats = localStorage.getItem("saved-chats");
   const isLightMode = localStorage.getItem("themeColor") === "light_mode";
@@ -22,17 +33,21 @@ const loadDataFromLocalstorage = () => {
   chatContainer.innerHTML = savedChats || '';
   document.body.classList.toggle("hide-header", savedChats);
   chatContainer.scrollTo(0, chatContainer.scrollHeight);
-}
+};
 
-// Create message element
+// ==============================
+// Create Message Element
+// ==============================
 const createMessageElement = (content, ...classes) => {
   const div = document.createElement("div");
   div.classList.add("message", ...classes);
   div.innerHTML = content;
   return div;
-}
+};
 
-// Typing effect
+// ==============================
+// Typing Effect
+// ==============================
 const showTypingEffect = (text, textElement, incomingMessageDiv) => {
   const words = text.split(' ');
   let currentWordIndex = 0;
@@ -50,9 +65,11 @@ const showTypingEffect = (text, textElement, incomingMessageDiv) => {
       localStorage.setItem("saved-chats", chatContainer.innerHTML);
     }
   }, 50);
-}
+};
 
-// API Request with updated format
+// ==============================
+// Generate Gemini API Response
+// ==============================
 const generateAPIResponse = async (incomingMessageDiv) => {
   const textElement = incomingMessageDiv.querySelector(".text");
 
@@ -61,10 +78,12 @@ const generateAPIResponse = async (incomingMessageDiv) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{ text: userMessage }]
-        }],
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: userMessage }]
+          }
+        ],
         generationConfig: {
           temperature: 0.9,
           topP: 1,
@@ -74,13 +93,15 @@ const generateAPIResponse = async (incomingMessageDiv) => {
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.error?.message || "API request failed");
     }
 
-    const apiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 
-                       "Sorry, I couldn't generate a response.";
+    const apiResponse =
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Sorry, I couldn’t generate a response.";
+
     showTypingEffect(apiResponse, textElement, incomingMessageDiv);
   } catch (error) {
     console.error("API Error:", error);
@@ -90,55 +111,70 @@ const generateAPIResponse = async (incomingMessageDiv) => {
   } finally {
     incomingMessageDiv.classList.remove("loading");
   }
-}
+};
 
-// Loading animation
+// ==============================
+// Show Loading Animation
+// ==============================
 const showLoadingAnimation = () => {
-  const html = `<div class="message-content">
-                  <img class="avatar" src="downloads.png" alt="Gemini avatar">
-                  <p class="text"></p>
-                  <div class="loading-indicator">
-                    <div class="loading-bar"></div>
-                    <div class="loading-bar"></div>
-                    <div class="loading-bar"></div>
-                  </div>
-                </div>
-                <span onclick="copyMessage(this)" class="icon material-symbols-rounded">content_copy</span>`;
+  const html = `
+    <div class="message-content">
+      <img class="avatar" src="downloads.png" alt="Gemini avatar">
+      <p class="text"></p>
+      <div class="loading-indicator">
+        <div class="loading-bar"></div>
+        <div class="loading-bar"></div>
+        <div class="loading-bar"></div>
+      </div>
+    </div>
+    <span onclick="copyMessage(this)" class="icon material-symbols-rounded">content_copy</span>
+  `;
 
   const incomingMessageDiv = createMessageElement(html, "incoming", "loading");
   chatContainer.appendChild(incomingMessageDiv);
   chatContainer.scrollTo(0, chatContainer.scrollHeight);
   generateAPIResponse(incomingMessageDiv);
-}
+};
 
-// Copy function
+// ==============================
+// Copy Message Function
+// ==============================
 window.copyMessage = (copyButton) => {
   const messageText = copyButton.parentElement.querySelector(".text").innerText;
   navigator.clipboard.writeText(messageText).then(() => {
     copyButton.innerText = "done";
-    setTimeout(() => copyButton.innerText = "content_copy", 1000);
+    setTimeout(() => (copyButton.innerText = "content_copy"), 1000);
   });
-}
+};
 
-// Add timestamp
+// ==============================
+// Add Timestamp
+// ==============================
 const appendTimestamp = (messageDiv) => {
   const timestamp = document.createElement("span");
   timestamp.className = "timestamp";
-  timestamp.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  timestamp.innerText = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   messageDiv.querySelector(".message-content").appendChild(timestamp);
-}
+};
 
-// Handle outgoing messages
+// ==============================
+// Handle Outgoing Messages
+// ==============================
 const handleOutgoingChatLogic = () => {
   userMessage = typingForm.querySelector(".typing-input").value.trim();
   if (!userMessage || isResponseGenerating) return;
 
   isResponseGenerating = true;
 
-  const html = `<div class="message-content">
-                  <img class="avatar" src="download1.png" alt="User avatar">
-                  <p class="text">${userMessage}</p>
-                </div>`;
+  const html = `
+    <div class="message-content">
+      <img class="avatar" src="download1.png" alt="User avatar">
+      <p class="text">${userMessage}</p>
+    </div>
+  `;
 
   const outgoingMessageDiv = createMessageElement(html, "outgoing");
   chatContainer.appendChild(outgoingMessageDiv);
@@ -148,15 +184,17 @@ const handleOutgoingChatLogic = () => {
   document.body.classList.add("hide-header");
   chatContainer.scrollTo(0, chatContainer.scrollHeight);
   setTimeout(showLoadingAnimation, 500);
-}
+};
 
-// Event listeners
+// ==============================
+// Event Listeners
+// ==============================
 typingForm.addEventListener("submit", (e) => {
   e.preventDefault();
   handleOutgoingChatLogic();
 });
 
-suggestions.forEach(suggestion => {
+suggestions.forEach((suggestion) => {
   suggestion.addEventListener("click", () => {
     userMessage = suggestion.querySelector(".text").innerText;
     handleOutgoingChatLogic();
@@ -176,5 +214,7 @@ deleteChatButton.addEventListener("click", () => {
   }
 });
 
-// Initialize
+// ==============================
+// Initialize App
+// ==============================
 loadDataFromLocalstorage();
