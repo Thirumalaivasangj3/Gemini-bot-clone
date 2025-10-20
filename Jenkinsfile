@@ -2,8 +2,6 @@ pipeline {
     agent any
 
     environment {
-        // Replace these with your Docker Hub credentials if you plan to push
-        DOCKER_HUB_USER = 'thiru2003'
         IMAGE_NAME = 'gemini-bot'
     }
 
@@ -31,24 +29,16 @@ pipeline {
                 script {
                     // Stop old container if exists
                     sh 'docker rm -f gemini-container || true'
-                    // Run the new one
-                    sh 'docker run -d -p 8081:80 --name gemini-container ${IMAGE_NAME}:latest'
-                }
-            }
-        }
 
-        stage('Optional: Push to Docker Hub') {
-            when {
-                expression { return env.DOCKER_HUB_USER != 'your-dockerhub-username' }
-            }
-            steps {
-                echo 'Pushing image to Docker Hub...'
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh '''
-                    echo "$PASSWORD" | docker login -u "$USERNAME" --password-stdin
-                    docker tag ${IMAGE_NAME}:latest $USERNAME/${IMAGE_NAME}:latest
-                    docker push $USERNAME/${IMAGE_NAME}:latest
-                    '''
+                    // Run the new one mapping port 8081
+                    sh 'docker run -d -p 8081:80 --name gemini-container ${IMAGE_NAME}:latest'
+
+                    // Wait for a few seconds to ensure container is up
+                    sh 'sleep 5'
+
+                    // Open the application automatically
+                    echo 'Opening the portal on port 8081...'
+                    sh 'xdg-open http://localhost:8081 || open http://localhost:8081 || true'
                 }
             }
         }
@@ -56,7 +46,7 @@ pipeline {
 
     post {
         success {
-            echo '🎉 Build and Deployment Successful!'
+            echo '🎉 Build and Deployment Successful! Portal running on http://localhost:8081'
         }
         failure {
             echo '❌ Build or Deployment Failed!'
